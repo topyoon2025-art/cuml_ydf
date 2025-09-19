@@ -1976,21 +1976,20 @@ FindSplitLabelClassificationFeatureNumericalHistogram(
     const int32_t attribute_idx, utils::RandomEngine* random,
     proto::NodeCondition* condition) {
   DCHECK(condition != nullptr);
-  if (!weights.empty()) {
-    DCHECK_EQ(weights.size(), labels.size());
-  }
 
   if (dt_config.missing_value_policy() ==
       proto::DecisionTreeTrainingConfig::LOCAL_IMPUTATION) {
     LocalImputationForNumericalAttribute(selected_examples, weights, attributes,
                                          &na_replacement);
   }
+
   // Determine the minimum and maximum values of the attribute.
   float min_value, max_value;
   if (!MinMaxNumericalAttribute(selected_examples, attributes, &min_value,
                                 &max_value)) {
     return SplitSearchResult::kInvalidAttribute;
   }
+  printf("min_value: %f, max_value: %f\n", min_value, max_value);
   // There should be at least two different unique values.
   if (min_value == max_value) {
     return SplitSearchResult::kInvalidAttribute;
@@ -2004,19 +2003,23 @@ FindSplitLabelClassificationFeatureNumericalHistogram(
       return threshold < other.threshold;
     }
   };
+  printf("num_label_classes: %d\n", num_label_classes);
+  printf("dt_config.numerical_split().num_candidates(): %d\n", dt_config.numerical_split().num_candidates());
+  printf("dt_config.numerical_split().type(): %d\n", dt_config.numerical_split().type());
 
   ASSIGN_OR_RETURN(
       const auto bins,
       internal::GenHistogramBins(dt_config.numerical_split().type(),
                                  dt_config.numerical_split().num_candidates(),
                                  attributes, min_value, max_value, random));
-
+  
   std::vector<CandidateSplit> candidate_splits(bins.size());
   for (int split_idx = 0; split_idx < candidate_splits.size(); split_idx++) {
     auto& candidate_split = candidate_splits[split_idx];
     candidate_split.pos_label_distribution.SetNumClasses(num_label_classes);
     candidate_split.threshold = bins[split_idx];
   }
+  printf("bins size: %d\n", bins.size());
 
   // Compute the split score of each threshold.
   for (const auto example_idx : selected_examples) {
@@ -2066,6 +2069,7 @@ FindSplitLabelClassificationFeatureNumericalHistogram(
 
     const double final_entropy = confusion.FinalEntropy();
     const double information_gain = initial_entropy - final_entropy;
+
     if (information_gain > condition->split_score()) {
       condition->set_split_score(information_gain);
       condition->mutable_condition()->mutable_higher_condition()->set_threshold(
@@ -2083,6 +2087,7 @@ FindSplitLabelClassificationFeatureNumericalHistogram(
       found_split = true;
     }
   }
+  
   return found_split ? SplitSearchResult::kBetterSplitFound
                      : SplitSearchResult::kNoBetterSplitFound;
 }
@@ -4885,6 +4890,7 @@ absl::StatusOr<std::vector<float>> GenHistogramBins(
            split_idx++) {
         candidate_splits[split_idx] = min_value + (max_value - min_value) *
                                                       (split_idx + 0.5f) /
+                                                      //(split_idx + 1.0f) /
                                                       candidate_splits.size();
       }
     } break;
@@ -4892,6 +4898,11 @@ absl::StatusOr<std::vector<float>> GenHistogramBins(
       return absl::InvalidArgumentError("Numerical histogram not implemented");
   }
   std::sort(candidate_splits.begin(), candidate_splits.end());
+  std::cout << "Candidate splits: ";
+  for (const auto v : candidate_splits) {
+    std::cout << v << ", ";
+  }
+  std::cout << std::endl;
   return candidate_splits;
 }
 

@@ -83,18 +83,18 @@ int main (int argc, char* argv[]) {
     //Create labels for samples to build histograms
     std::vector<int> h_labels = dataset.labels;
 
-    Utils::RandomConfig cfg;
-    cfg.minValue = 0;
-    cfg.maxValue = num_cols - 1;
-    cfg.count    = selected_features_count * num_proj; // total number of indices needed
-    cfg.unique   = true;
-    cfg.seed     = col_gen_seed;        // comment this line → fresh set every run
+    // Utils::RandomConfig cfg;
+    // cfg.minValue = 0;
+    // cfg.maxValue = num_cols - 1;
+    // cfg.count    = selected_features_count * num_proj; // total number of indices needed
+    // cfg.unique   = true;
+    // cfg.seed     = col_gen_seed;        // comment this line → fresh set every run
 
-    auto numbers = Utils::generateRandom(cfg);
+    // auto numbers = Utils::generateRandom(cfg);
 
-    std::cout << "Random picks:";
-    for (int n : numbers) std::cout << ' ' << n;
-    std::cout << '\n';
+    // std::cout << "Random picks:";
+    // for (int n : numbers) std::cout << ' ' << n;
+    // std::cout << '\n';
     
    
 
@@ -106,7 +106,7 @@ int main (int argc, char* argv[]) {
 
     //////////////////////////////////////////////////////debug
     // Copy generated random indices to total_col_indices
-    std::copy(numbers.begin(), numbers.end(), total_col_indices.begin());
+    // std::copy(numbers.begin(), numbers.end(), total_col_indices.begin());
     //////////////////////////////////////////////////////debug
 
     float* d_col_add_projected = nullptr;
@@ -235,206 +235,206 @@ int main (int argc, char* argv[]) {
 
 
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ////////////CPU Orginal Dataset load////////////////
-    std::string prefix = "csv:../../nl_";
+    // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ////////////CPU Orginal Dataset load////////////////
+    // std::string prefix = "csv:../../nl_";
 
-    std::string ydf_path = prefix + path; //Path to load dataset
-    //../../dataset/50000000x22.csv
-    ydf_path = "csv:../../dataset/nl_50000000x22.csv";
+    // std::string ydf_path = prefix + path; //Path to load dataset
+    // //../../dataset/50000000x22.csv
+    // ydf_path = "csv:../../dataset/nl_50000000x22.csv";
 
 
     
 
 
 
-    // Load dataset to test, do this only once to get the experiment time
-    yggdrasil_decision_forests::dataset::VerticalDataset train_dataset;
-    yggdrasil_decision_forests::dataset::proto::DataSpecification data_spec;
-    yggdrasil_decision_forests::dataset::LoadConfig config;
-    yggdrasil_decision_forests::dataset::proto::DataSpecificationGuide guide;
-    const bool use_flume = false;
-    //Create data_spec
-    absl::Status spec_status = yggdrasil_decision_forests::dataset::CreateDataSpecWithStatus(ydf_path, use_flume, guide, &data_spec);
-    absl::Status load_status = yggdrasil_decision_forests::dataset::LoadVerticalDataset(ydf_path, data_spec, &train_dataset, {}, config);
-    if (!load_status.ok()) {
-    std::cerr << "Failed to load dataset: " << load_status.message() << std::endl;
-    return 1;
-    }
+    // // Load dataset to test, do this only once to get the experiment time
+    // yggdrasil_decision_forests::dataset::VerticalDataset train_dataset;
+    // yggdrasil_decision_forests::dataset::proto::DataSpecification data_spec;
+    // yggdrasil_decision_forests::dataset::LoadConfig config;
+    // yggdrasil_decision_forests::dataset::proto::DataSpecificationGuide guide;
+    // const bool use_flume = false;
+    // //Create data_spec
+    // absl::Status spec_status = yggdrasil_decision_forests::dataset::CreateDataSpecWithStatus(ydf_path, use_flume, guide, &data_spec);
+    // absl::Status load_status = yggdrasil_decision_forests::dataset::LoadVerticalDataset(ydf_path, data_spec, &train_dataset, {}, config);
+    // if (!load_status.ok()) {
+    // std::cerr << "Failed to load dataset: " << load_status.message() << std::endl;
+    // return 1;
+    // }
 
-    ///////////CPU//////////////////////
-    //For CPU Start
-    std::vector<uint32_t> selected_indices;
-    for (uint32_t i = 0; i < num_rows; ++i) {
-        selected_indices.push_back(i);
-    }
-    absl::Span<const uint32_t> selected_examples(selected_indices);
-    //For CPU End
+    // ///////////CPU//////////////////////
+    // //For CPU Start
+    // std::vector<uint32_t> selected_indices;
+    // for (uint32_t i = 0; i < num_rows; ++i) {
+    //     selected_indices.push_back(i);
+    // }
+    // absl::Span<const uint32_t> selected_examples(selected_indices);
+    // //For CPU End
 
-    std::vector<float> CPU_values(num_rows);//Define here to store results from CPU
-    std::vector<int> col_indices(selected_features_count); //col_indices for GPU
-    float best_gain_overall = 0.0f;
-    int best_bin_overall  = 0;
-    int best_proj_overall = -1;
-    float threshold_overall = 0.0f;
-    double ydf_projection_time_elapsed = 0;
-    double ydf_build_histogram_time_elapsed = 0;
-    double ydf_split_time_elapsed = 0;
+    // std::vector<float> CPU_values(num_rows);//Define here to store results from CPU
+    // std::vector<int> col_indices(selected_features_count); //col_indices for GPU
+    // float best_gain_overall = 0.0f;
+    // int best_bin_overall  = 0;
+    // int best_proj_overall = -1;
+    // float threshold_overall = 0.0f;
+    // double ydf_projection_time_elapsed = 0;
+    // double ydf_build_histogram_time_elapsed = 0;
+    // double ydf_split_time_elapsed = 0;
 
 
 
-    for (int i = 0; i < num_proj; ++i) //Iteration to get them emperiment result, same as project number for each projection
-    {
-        for (int j = 0; j < selected_features_count; ++j){
-            col_indices[j] = total_col_indices[i*selected_features_count + j];
+    // for (int i = 0; i < num_proj; ++i) //Iteration to get them emperiment result, same as project number for each projection
+    // {
+    //     for (int j = 0; j < selected_features_count; ++j){
+    //         col_indices[j] = total_col_indices[i*selected_features_count + j];
             
-        }
+    //     }
 
-        if (verbose) {
-            std::cout << "Projection " << i << ": ";
+    //     if (verbose) {
+    //         std::cout << "Projection " << i << ": ";
             
-            std::cout << "Selected features indices: ";
-            for (int idx : col_indices) {
-                std::cout << idx << " ";
-            }
-            std::cout << std::endl;
-        }
+    //         std::cout << "Selected features indices: ";
+    //         for (int idx : col_indices) {
+    //             std::cout << idx << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
         
-        google::protobuf::RepeatedField<int32_t> numerical_features;//for CPU version to run it using YDF library
-        // std::cout << "Selected features indices: ";
-        for (int idx : col_indices){
-            numerical_features.Add(idx);//numerical_features for CPU
-        }
-        // Create ProjectionEvaluator for CPU
-        yggdrasil_decision_forests::model::decision_tree::internal::ProjectionEvaluator evaluator(train_dataset, numerical_features);
+    //     google::protobuf::RepeatedField<int32_t> numerical_features;//for CPU version to run it using YDF library
+    //     // std::cout << "Selected features indices: ";
+    //     for (int idx : col_indices){
+    //         numerical_features.Add(idx);//numerical_features for CPU
+    //     }
+    //     // Create ProjectionEvaluator for CPU
+    //     yggdrasil_decision_forests::model::decision_tree::internal::ProjectionEvaluator evaluator(train_dataset, numerical_features);
 
-        // Create projection class
-        yggdrasil_decision_forests::model::decision_tree::internal::Projection projection;
-        for (int n = 0; n < selected_features_count; ++n) {
-            projection.push_back({.attribute_idx = numerical_features[n], .weight = 1.0f});
-        }
+    //     // Create projection class
+    //     yggdrasil_decision_forests::model::decision_tree::internal::Projection projection;
+    //     for (int n = 0; n < selected_features_count; ++n) {
+    //         projection.push_back({.attribute_idx = numerical_features[n], .weight = 1.0f});
+    //     }
  
-        // Step 6: Evaluate projection for CPU
-        ////////////////////////////////////////////////////////////CPU////////////////////////////////////////////////////
-        auto startA = std::chrono::high_resolution_clock::now();
-        absl::Status eval_cpu_status = evaluator.Evaluate(projection, absl::MakeSpan(selected_examples), &CPU_values);
-        auto endA = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> durationA = endA - startA;
-        ydf_projection_time_elapsed += durationA.count(); 
+    //     // Step 6: Evaluate projection for CPU
+    //     ////////////////////////////////////////////////////////////CPU////////////////////////////////////////////////////
+    //     auto startA = std::chrono::high_resolution_clock::now();
+    //     absl::Status eval_cpu_status = evaluator.Evaluate(projection, absl::MakeSpan(selected_examples), &CPU_values);
+    //     auto endA = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double, std::milli> durationA = endA - startA;
+    //     ydf_projection_time_elapsed += durationA.count(); 
 
-        if (!eval_cpu_status.ok()) {
-            std::cerr << "CPU Evaluation failed: " << eval_cpu_status.message() << std::endl;
-            return 1;
-        }   
+    //     if (!eval_cpu_status.ok()) {
+    //         std::cerr << "CPU Evaluation failed: " << eval_cpu_status.message() << std::endl;
+    //         return 1;
+    //     }   
         
-        ////////////////////////////////////////////////////////////CPU_data////////////////////////////////////////////////
+    //     ////////////////////////////////////////////////////////////CPU_data////////////////////////////////////////////////
         
-        if (verbose) {
-            std::cout << "CPU Projection[" << i << "] values: ";
-            for (float value : CPU_values) {
-                std::cout << value << ", ";
-            }
-            std::cout << std::endl;
-            printf("labels: ");
-            for (int value : h_labels){  
-                printf("%d, ", value);
-            }
-            printf("\n");
-        }
+    //     if (verbose) {
+    //         std::cout << "CPU Projection[" << i << "] values: ";
+    //         for (float value : CPU_values) {
+    //             std::cout << value << ", ";
+    //         }
+    //         std::cout << std::endl;
+    //         printf("labels: ");
+    //         for (int value : h_labels){  
+    //             printf("%d, ", value);
+    //         }
+    //         printf("\n");
+    //     }
 
         
         
-        ////////////////////////////////////////////////////////////CPU_data/////////////////////////////////////////////////
+    //     ////////////////////////////////////////////////////////////CPU_data/////////////////////////////////////////////////
         
 
-        absl::Span<const float> attribute_values = absl::MakeConstSpan(CPU_values);
-        // 2. selected_examples <- good to use this variable already
-        // 3. Create weights for the samples
-        std::vector<float> weights = {};  // Leave empty for unweighted
-        // 4. Create labels for targets or take labels previously generated
+    //     absl::Span<const float> attribute_values = absl::MakeConstSpan(CPU_values);
+    //     // 2. selected_examples <- good to use this variable already
+    //     // 3. Create weights for the samples
+    //     std::vector<float> weights = {};  // Leave empty for unweighted
+    //     // 4. Create labels for targets or take labels previously generated
 
-        /////////////////////////////////////////////////////////////////////////////////
-        // 5. num_bins, it gets passed in as an argument
-        // 6. num_label_classes
-        int32_t num_label_classes = 2;
-        // 7. na_replacement 
-        const double na_replacement = 0;
-        // 8. min_num_obs
-        int32_t min_num_obs = 1;
-        // 9. dt_config
-        yggdrasil_decision_forests::model::decision_tree::proto::DecisionTreeTrainingConfig dt_config;
-        dt_config.mutable_numerical_split()->set_num_candidates(num_bins);
-        dt_config.mutable_numerical_split()->set_type(yggdrasil_decision_forests::model::decision_tree::proto::NumericalSplit::HISTOGRAM_EQUAL_WIDTH);
-        //dt_config.mutable_numerical_split()->set_type(yggdrasil_decision_forests::model::decision_tree::proto::NumericalSplit::UNIFORM);
+    //     /////////////////////////////////////////////////////////////////////////////////
+    //     // 5. num_bins, it gets passed in as an argument
+    //     // 6. num_label_classes
+    //     int32_t num_label_classes = 2;
+    //     // 7. na_replacement 
+    //     const double na_replacement = 0;
+    //     // 8. min_num_obs
+    //     int32_t min_num_obs = 1;
+    //     // 9. dt_config
+    //     yggdrasil_decision_forests::model::decision_tree::proto::DecisionTreeTrainingConfig dt_config;
+    //     dt_config.mutable_numerical_split()->set_num_candidates(num_bins);
+    //     dt_config.mutable_numerical_split()->set_type(yggdrasil_decision_forests::model::decision_tree::proto::NumericalSplit::HISTOGRAM_EQUAL_WIDTH);
+    //     //dt_config.mutable_numerical_split()->set_type(yggdrasil_decision_forests::model::decision_tree::proto::NumericalSplit::UNIFORM);
         
 
 
    
-        // 10. label_distribution
-        yggdrasil_decision_forests::utils::IntegerDistributionDouble label_distribution;
-        label_distribution.SetNumClasses(num_label_classes);
-        for (int label : h_labels) {
-            label_distribution.Add(label);
-        }
+    //     // 10. label_distribution
+    //     yggdrasil_decision_forests::utils::IntegerDistributionDouble label_distribution;
+    //     label_distribution.SetNumClasses(num_label_classes);
+    //     for (int label : h_labels) {
+    //         label_distribution.Add(label);
+    //     }
 
-        // 11. attribute_idx
-        int32_t attribute_idx = 0;
-        // 12. Allocate a condition
+    //     // 11. attribute_idx
+    //     int32_t attribute_idx = 0;
+    //     // 12. Allocate a condition
         
 
  
         
         
-        // printf("Attribute values size: %zu\n", attribute_values.size());
-        // printf("Selected examples size: %zu\n", selected_examples.size());
-        // printf("Labels size: %zu\n", h_labels.size());
+    //     // printf("Attribute values size: %zu\n", attribute_values.size());
+    //     // printf("Selected examples size: %zu\n", selected_examples.size());
+    //     // printf("Labels size: %zu\n", h_labels.size());
         
-        yggdrasil_decision_forests::model::decision_tree::proto::NodeCondition best_condition;
-        yggdrasil_decision_forests::utils::RandomEngine random(42);
-        auto startC = std::chrono::high_resolution_clock::now();
-        yggdrasil_decision_forests::model::decision_tree::FindSplitLabelClassificationFeatureNumericalHistogram(
-        absl::MakeConstSpan(selected_examples),
-        weights,
-        attribute_values,
-        h_labels,
-        num_label_classes,
-        na_replacement,
-        min_num_obs,
-        dt_config,
-        label_distribution,
-        attribute_idx,
-        &random,
-        &best_condition);
-        auto endC = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> durationC = endC - startC;
-        ydf_split_time_elapsed += durationC.count(); 
+    //     yggdrasil_decision_forests::model::decision_tree::proto::NodeCondition best_condition;
+    //     yggdrasil_decision_forests::utils::RandomEngine random(42);
+    //     auto startC = std::chrono::high_resolution_clock::now();
+    //     yggdrasil_decision_forests::model::decision_tree::FindSplitLabelClassificationFeatureNumericalHistogram(
+    //     absl::MakeConstSpan(selected_examples),
+    //     weights,
+    //     attribute_values,
+    //     h_labels,
+    //     num_label_classes,
+    //     na_replacement,
+    //     min_num_obs,
+    //     dt_config,
+    //     label_distribution,
+    //     attribute_idx,
+    //     &random,
+    //     &best_condition);
+    //     auto endC = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double, std::milli> durationC = endC - startC;
+    //     ydf_split_time_elapsed += durationC.count(); 
 
         
 
 
 
-        // std::cout << best_condition.DebugString() << std::endl;
-        if (best_condition.split_score() > best_gain_overall) {
-            best_gain_overall = best_condition.split_score();
-            best_bin_overall = best_condition.na_value(); // Using na_value to store best bin index
-            best_proj_overall = i;            
-        }   
+    //     // std::cout << best_condition.DebugString() << std::endl;
+    //     if (best_condition.split_score() > best_gain_overall) {
+    //         best_gain_overall = best_condition.split_score();
+    //         best_bin_overall = best_condition.na_value(); // Using na_value to store best bin index
+    //         best_proj_overall = i;            
+    //     }   
 
-    }
-    std::cout << std::endl;
-    if (best_proj_overall != -1) {
-        printf("CPU Best Projection: %d\n", best_proj_overall);
-        printf("CPU Best Gain: %f\n", best_gain_overall);
-        printf("CPU Best Bin index: %d\n", best_bin_overall);    
-    } else {
-        printf("No valid projection found.\n");
-    }
-    std::cout << std::endl;
-    std::cout << "YDF Apply Projection time elapsed: " << ydf_projection_time_elapsed << " ms " << std::endl;
-    std::cout << "YDF Gini + Histogram time elapsed: " << ydf_split_time_elapsed << " ms " << std::endl;
-    std::cout << "YDF Total time elapsed: " << ydf_projection_time_elapsed + ydf_split_time_elapsed << " ms " << std::endl;
+    // }
+    // std::cout << std::endl;
+    // if (best_proj_overall != -1) {
+    //     printf("CPU Best Projection: %d\n", best_proj_overall);
+    //     printf("CPU Best Gain: %f\n", best_gain_overall);
+    //     printf("CPU Best Bin index: %d\n", best_bin_overall);    
+    // } else {
+    //     printf("No valid projection found.\n");
+    // }
+    // std::cout << std::endl;
+    // std::cout << "YDF Apply Projection time elapsed: " << ydf_projection_time_elapsed << " ms " << std::endl;
+    // std::cout << "YDF Gini + Histogram time elapsed: " << ydf_split_time_elapsed << " ms " << std::endl;
+    // std::cout << "YDF Total time elapsed: " << ydf_projection_time_elapsed + ydf_split_time_elapsed << " ms " << std::endl;
              
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
 
 

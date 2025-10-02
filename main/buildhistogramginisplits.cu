@@ -127,16 +127,10 @@ __global__ void BuildHistogramExactWidthKernel(
         shared_mem[i] = 0;
     __syncthreads();
 
-
-     // Each block handles one projection
-    int base_idx = proj_id * num_rows; // Base index for the current projection
-
-
     float min_val = d_min_vals[proj_id];
     float max_val = d_max_vals[proj_id];
     float inv_bin_width  = 1.f / d_bin_widths[proj_id]; 
 
-  
     const std::size_t col_offset = std::size_t(proj_id) * num_rows;
     const int stride = blockDim.x * gridDim.x;
     const int tid    = threadIdx.x + blockIdx.x * blockDim.x;
@@ -152,19 +146,106 @@ __global__ void BuildHistogramExactWidthKernel(
         
         if (label == 0) {
             atomicAdd(&shared_mem[bin], 1);
+            //shared_mem[bin] += 1;
         } 
         else {
             atomicAdd(&shared_mem[num_bins + bin], 1);
+            //shared_mem[bin] += 1;
         }
     }
     __syncthreads();
 
     int offset =  proj_id * num_bins;
     for (int i = threadIdx.x; i < num_bins; i += blockDim.x) {
-         atomicAdd(&d_hist_class0[offset + i], shared_mem[i]);
-         atomicAdd(&d_hist_class1[offset + i], shared_mem[num_bins + i]);
+        //  atomicAdd(&d_hist_class0[offset + i], shared_mem[i]);
+        //  atomicAdd(&d_hist_class1[offset + i], shared_mem[num_bins + i]);
+        d_hist_class0[offset + i] += shared_mem[i];
+        d_hist_class1[offset + i] += shared_mem[num_bins + i];  
+
     }    
 }
+
+/****************************************************************************
+* PASS 1 : one thread per row – compute the bin number for every projection *
+****************************************************************************/
+__global__ void pass1_record_bins
+(
+    const float * __restrict__ d_col_add_projected, // [num_proj·num_rows]
+    const float * __restrict__ d_min_vals,          // [num_proj]
+    const float * __restrict__ d_max_vals,          // [num_proj]
+    const float * __restrict__ d_bin_widths,        // [num_proj]
+    unsigned short * __restrict__ d_row_bins,       // tmp [num_proj·num_rows]
+    int num_rows,
+    int num_proj,
+    int num_bins
+)
+{
+    const int row = threadIdx.x + blockIdx.x * blockDim.x;
+    if (row >= num_rows) return;
+
+    /*  Every thread loops over ALL projections – this is still free of
+        collisions because each (projection,row) pair is written exactly
+        once, by this very thread.                                          */
+    for (int proj = 0; proj < num_proj; ++proj)
+    {
+        const float min_val = d_min_vals[proj];
+        const float max_val = d_max_vals[proj];
+        const float inv_bw  = 1.f / d_bin_widths[proj];
+
+        float v = __ldg(&d_col_add_projected[ std::size_t(proj)*num_rows + row ]);
+
+        int bin = (v >= max_val)
+                  ? (num_bins - 1)
+                  : max(0, min(int((v - min_val) * inv_bw), num_bins - 1));
+
+        d_row_bins[ std::size_t(proj)*num_rows + row ] = static_cast<unsigned short>(bin);
+    }
+}
+
+/****************************************************************************
+* PASS 2 : one thread per (projection , bin) – count rows                   *
+****************************************************************************/
+__global__ void pass2_build_histograms
+(
+    const unsigned short * __restrict__ d_row_bins, // tmp from pass 1
+    const int            * __restrict__ d_labels,   // [num_rows]
+    int * __restrict__ d_hist_class0,               // [num_proj·num_bins]
+    int * __restrict__ d_hist_class1,               // [num_proj·num_bins]
+    int num_rows,
+    int num_proj,
+    int num_bins
+)
+{
+    const int proj_id = blockIdx.y;                       // 0 … num_proj-1
+    const int bin_id  = threadIdx.x + blockIdx.x * blockDim.x;
+    if (proj_id >= num_proj || bin_id >= num_bins) return;
+
+    int cnt0 = 0, cnt1 = 0;
+
+    /*  Walk over ALL rows and test whether they belong to my bin.       */
+    const std::size_t proj_offset = std::size_t(proj_id) * num_rows;
+
+    for (int row = 0; row < num_rows; ++row)
+    {
+        if (d_row_bins[proj_offset + row] == bin_id)
+        {
+            if (d_labels[row] == 0) ++cnt0;
+            else                    ++cnt1;
+        }
+    }
+
+    /*  Each thread owns exactly one output element – plain stores.      */
+    const std::size_t out = std::size_t(proj_id) * num_bins + bin_id;
+    d_hist_class0[out] = cnt0;
+    d_hist_class1[out] = cnt1;
+}
+
+
+
+
+
+
+
 
 __global__ void FindBestGiniSplitKernel(
     const int* hist_class0,
@@ -364,7 +445,8 @@ void BuildExactWidthHistogram (float* d_col_add_projected,
     *d_hist_class1_out = d_hist_class1;
     
     int threads_per_block_hist = 256;
-    int blocks_per_grid_hist = (num_rows + threads_per_block_hist - 1) / threads_per_block_hist;
+    int num_elements_per_thread = 8;
+    int blocks_per_grid_hist = (num_rows/num_elements_per_thread + threads_per_block_hist - 1) / threads_per_block_hist;
     //int blocks_per_grid_hist = 256;
     dim3 grid_hist(blocks_per_grid_hist, num_proj);
     dim3 block_hist(threads_per_block_hist);    
@@ -380,15 +462,51 @@ void BuildExactWidthHistogram (float* d_col_add_projected,
     cudaDeviceSynchronize(); 
     auto endC = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> durationC = endC - startC;
-    elapsed_ms = durationA.count() + durationB.count() + durationC.count();
-   
-
-    
+    //elapsed_ms = durationA.count() + durationB.count() + durationC.count();
+    elapsed_ms = durationC.count();
+    printf("Elapsed time for hist: %f ms\n", elapsed_ms);
     if (err2 != cudaSuccess) {
-        printf("Kernel launch failed hist: %s\n", cudaGetErrorString(err1));
+        printf("Kernel launch failed hist: %s\n", cudaGetErrorString(err2));
     }
  
     // BuildExactWidthHistogramKernel done//////////////////////////////////////////
+
+    // unsigned short *d_row_bins;
+    // cudaMalloc(&d_row_bins,
+    //            std::size_t(num_proj)*num_rows*sizeof(unsigned short));
+
+    // /*  PASS 1  */
+    // const int THREADS = 256;
+    // dim3 grid1( (num_rows + THREADS - 1) / THREADS );
+    // auto start1 = std::chrono::high_resolution_clock::now();
+    // pass1_record_bins<<< grid1, THREADS >>>(
+    //         d_col_add_projected,
+    //         d_min_vals, d_max_vals, d_bin_widths,
+    //         d_row_bins,
+    //         num_rows, num_proj, num_bins );
+    // cudaDeviceSynchronize(); 
+    // auto end1 = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double, std::milli> duration1 = end1 - start1;
+
+    // /*  PASS 2  */
+    // const int THREADS2 = 256;
+    // dim3 block2(THREADS2);
+    // dim3 grid2( (num_bins + THREADS2 - 1) / THREADS2 , num_proj );
+    // auto start2 = std::chrono::high_resolution_clock::now();
+    // pass2_build_histograms<<< grid2, block2 >>>(
+    //         d_row_bins,
+    //         d_labels,
+    //         d_hist_class0, d_hist_class1,
+    //         num_rows, num_proj, num_bins );
+    // auto end2 = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double, std::milli> duration2 = end2 - start2;
+    // cudaDeviceSynchronize();
+    // elapsed_ms = duration1.count() + duration2.count();
+    //     printf("Elapsed time for pass1_record_bins: %f ms\n", duration1.count());
+    //     printf("Elapsed time for pass2_build_histograms: %f ms\n", duration2.count());
+    //     printf("Total elapsed time for 2-pass histogram: %f ms\n", elapsed_ms);
+    // cudaFree(d_row_bins);
+    
 
     if (verbose){
             // Copy min, max, bin_widths to host and print

@@ -30,10 +30,7 @@ absl::Status CudaStatus(cudaError_t code) {
   }
   return absl::OkStatus();
 }
-#define RETURN_IF_ERROR(expr) do {   \                           
-    absl::Status _status = (expr);   \ 
-    if (!_status.ok()) return _status; \
-  } while (0)
+#define RETURN_IF_ERROR(expr) do {absl::Status _status = (expr);if (!_status.ok()) return _status;} while (0)
 
 #define RET_CUDA(x) RETURN_IF_ERROR(CudaStatus(x))
 
@@ -71,12 +68,6 @@ __global__ void RandomColumnGenerationKernel(int* total_col_indices,
                                              int selected_features_count, 
                                              int num_proj, 
                                              unsigned long long seed) {
-
-    // int thread_id_in_block = threadIdx.y * blockDim.x + threadIdx.x;
-    // int threads_per_block = blockDim.x * blockDim.y;
-    // int block_id = blockIdx.y * gridDim.x + blockIdx.x;
-    // int proj_id = block_id * threads_per_block + thread_id_in_block;
-
 
     int proj_id = blockIdx.x * blockDim.x + threadIdx.x;
     if (proj_id >= num_proj) return;
@@ -207,16 +198,16 @@ void ApplyProjectionColumnADD (const float* flat_data,
   cudaDeviceSynchronize();  // Ensure kernel finishes
 
   //Copy the generated column data from device to host
-  //cudaMemcpy(total_col_indices, d_flat_col_data, num_proj * selected_features_count * sizeof(int), cudaMemcpyDeviceToHost);
-  cudaMemcpy(d_flat_col_data, total_col_indices, num_proj * selected_features_count * sizeof(int), cudaMemcpyHostToDevice);  
+  cudaMemcpy(total_col_indices, d_flat_col_data, num_proj * selected_features_count * sizeof(int), cudaMemcpyDeviceToHost);
+  //cudaMemcpy(d_flat_col_data, total_col_indices, num_proj * selected_features_count * sizeof(int), cudaMemcpyHostToDevice);  
 
     // Launch CUDA kernel
-  int block_size_x = 32;
-  int block_size_y = 8;
+  int block_size_x = 16;
+  int block_size_y = 16;
   // //int threads_per_block = block_size_x * block_size_y;
   dim3 block_size(block_size_x, block_size_y); 
   dim3 grid_size((num_proj + block_size_x - 1) / block_size_x,
-          min((num_rows + block_size_y - 1) / block_size_y, 512)); 
+          min((num_rows + block_size_y - 1) / block_size_y, 32768)); 
 
   auto startA = std::chrono::high_resolution_clock::now();
   ColumnAddProjectionKernel<<<grid_size, block_size>>>(d_flat_data,
